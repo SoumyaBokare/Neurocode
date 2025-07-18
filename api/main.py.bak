@@ -1,0 +1,77 @@
+from fastapi import FastAPI
+from pydantic import BaseModel
+from agents.code_analysis.agent import CodeAnalysisAgent
+from agents.bug_detection.agent import BugDetectionAgent
+from agents.documentation.agent import DocumentationAgent
+from vector_db.faiss_index import CodeVectorIndex
+from orchestration.agent_router import route_code_task
+from orchestration.langchain_router import LangChainRouter
+
+app = FastAPI()
+
+agent = CodeAnalysisAgent()
+bug_agent = BugDetectionAgent()
+doc_agent = DocumentationAgent()
+vector_index = CodeVectorIndex()
+langchain_router = LangChainRouter()
+
+class CodeInput(BaseModel):
+    code: str
+
+class SearchResult(BaseModel):
+    matches: list
+
+class BugPredictionInput(BaseModel):
+    code: str
+
+class RouteTaskInput(BaseModel):
+    code: str
+    task: str
+
+class DocGenInput(BaseModel):
+    code: str
+
+class MultiAgentInput(BaseModel):
+    code: str
+    task: str
+
+@app.get("/")
+def root():
+    return {"status": "NeuroCode Assistant is alive!"}
+
+@app.post("/analyze")
+def analyze_code(input: CodeInput):
+    embedding = agent.analyze(input.code)
+    return {"vector": embedding.tolist()}
+
+@app.post("/add")
+def add_code(input: CodeInput):
+    embedding = agent.analyze(input.code)
+    vector_index.add_vector(embedding, input.code)
+    return {"status": "added"}
+
+@app.post("/search")
+def search_code(input: CodeInput):
+    embedding = agent.analyze(input.code)
+    matches = vector_index.search(embedding, k=3)
+    return {"matches": matches}
+
+@app.post("/predict-bugs")
+def predict_bugs(input: BugPredictionInput):
+    result = bug_agent.predict(input.code)
+    return result
+
+@app.post("/route-task")
+def route_task(input: RouteTaskInput):
+    result = route_code_task(input.code, input.task)
+    return result
+
+@app.post("/generate-docs")
+def generate_docs(input: DocGenInput):
+    result = doc_agent.generate(input.code)
+    return result
+
+@app.post("/multi-agent")
+def multi_agent(input: MultiAgentInput):
+    result = langchain_router.route(input.code, input.task)
+    return result
